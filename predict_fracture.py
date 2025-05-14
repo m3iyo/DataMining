@@ -4,7 +4,6 @@ from skimage.feature import hog
 import joblib
 import os
 
-# --- Configuration (should match training.py) ---
 IMAGE_SIZE = (224, 224)
 HOG_ORIENTATIONS = 9
 HOG_PIXELS_PER_CELL = (8, 8)
@@ -14,7 +13,6 @@ MODEL_FILENAME = "bone_fracture_svm_model.joblib"
 SCALER_FILENAME = "scaler.joblib"
 PCA_FILENAME = "pca_transformer.joblib"
 
-# --- Helper Functions (can be copied from training.py or re-defined) ---
 def preprocess_image(image_path: str, target_size: tuple[int, int]) -> np.ndarray | None:
     """
     Loads, resizes, and normalizes a grayscale image.
@@ -36,21 +34,18 @@ def extract_hog_features(image: np.ndarray) -> np.ndarray:
                    pixels_per_cell=HOG_PIXELS_PER_CELL,
                    cells_per_block=HOG_CELLS_PER_BLOCK,
                    block_norm='L2-Hys', # Common normalization
-                   visualize=False, # Set to True to return HOG image for inspection
-                   transform_sqrt=True, # Improves performance
-                   feature_vector=True) # Returns a 1D array
+                   visualize=False, 
+                   transform_sqrt=True, 
+                   feature_vector=True) 
     return features
 
-# --- Main Prediction Logic ---
 if __name__ == "__main__":
-    # Prompt the user for the image path
     new_image_path = input("Please enter the full path to the new X-ray image: ")
 
     if not os.path.exists(new_image_path):
         print(f"Error: The file '{new_image_path}' does not exist. Please check the path.")
         exit()
 
-    # 1. Load the trained model and transformers
     print(f"Loading model: {MODEL_FILENAME}")
     print(f"Loading scaler: {SCALER_FILENAME}")
     print(f"Loading PCA transformer: {PCA_FILENAME}")
@@ -72,45 +67,31 @@ if __name__ == "__main__":
     processed_image = preprocess_image(new_image_path, IMAGE_SIZE)
 
     if processed_image is None:
-        exit() # Error message already printed by preprocess_image
+        exit() 
 
-    # 3. Extract HOG features
     print("Extracting HOG features...")
     hog_features_new_image = extract_hog_features(processed_image)
-    # Reshape for scaler/pca: needs to be 2D array (1 sample, N features)
     hog_features_new_image_reshaped = hog_features_new_image.reshape(1, -1)
     print(f"HOG features extracted. Shape: {hog_features_new_image_reshaped.shape}")
 
-    # 4. Scale features
     print("Scaling features...")
     scaled_features_new_image = scaler.transform(hog_features_new_image_reshaped)
 
-    # 5. Transform features using PCA
     print("Applying PCA transformation...")
     pca_features_new_image = pca.transform(scaled_features_new_image)
     print(f"Features after PCA. Shape: {pca_features_new_image.shape}")
 
-    # 6. Predict
     print("Making prediction...")
     prediction_numeric = model.predict(pca_features_new_image)
     
-    # Get probability scores if the model supports it (SVC with probability=True does)
     try:
         probability_scores = model.predict_proba(pca_features_new_image)
     except AttributeError:
         probability_scores = None # Model does not support predict_proba
         print("Warning: The loaded model does not support probability scores.")
 
-    # Interpret the prediction
-    # IMPORTANT: This mapping needs to align with how 'training.py' defines labels.
-    # Typically, os.listdir sorts folder names, so 'Fractured' might be 0 and 'NonFractured' 1.
-    # Verify this from your 'training_metrics.txt' or by recalling the training output.
-    # For this example, we'll assume the common alphabetical sorting:
-    # If 'Fractured' comes before 'NonFractured' alphabetically:
+    
     class_labels_map_from_training = {0: "Fractured", 1: "NonFractured"} 
-    # If 'NonFractured' comes before 'Fractured' alphabetically:
-    # class_labels_map_from_training = {0: "NonFractured", 1: "Fractured"}
-    # You MUST confirm this based on your 'training.py's load_images_from_folder behavior.
 
     predicted_label = class_labels_map_from_training.get(prediction_numeric[0], "Unknown Label")
 
@@ -118,11 +99,9 @@ if __name__ == "__main__":
     print(f"The model predicts the image '{os.path.basename(new_image_path)}' as: {predicted_label}")
     
     if probability_scores is not None:
-        # Display probabilities in a more readable way, mapping to labels
         prob_fractured = probability_scores[0][class_labels_map_from_training.inverse_lookup("Fractured")] if "Fractured" in class_labels_map_from_training.values() else "N/A"
         prob_non_fractured = probability_scores[0][class_labels_map_from_training.inverse_lookup("NonFractured")] if "NonFractured" in class_labels_map_from_training.values() else "N/A"
         
-        # A bit more robust way to display probabilities without assuming fixed order in predict_proba output
         print("Confidence Scores:")
         for i, class_name in class_labels_map_from_training.items():
             if i < len(probability_scores[0]):
