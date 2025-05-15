@@ -84,25 +84,37 @@ def preprocess_image(image: np.ndarray, target_size: tuple[int, int]) -> np.ndar
     img_normalized = img_resized / 255.0
     return img_normalized
 
-def extract_hog_features(image: np.ndarray) -> np.ndarray:
+def extract_hog_features(image: np.ndarray, visualize_output: bool = False) -> tuple[np.ndarray, np.ndarray | None] | np.ndarray:
     """
     Extracts HOG features from a single image.
 
     Args:
         image: The input preprocessed image.
+        visualize_output: If True, also returns the HOG image for visualization.
 
     Returns:
-        The HOG feature vector.
+        The HOG feature vector. If visualize_output is True, returns a tuple (features, hog_image).
     """
-    features = hog(image,
-                   orientations=HOG_ORIENTATIONS,
-                   pixels_per_cell=HOG_PIXELS_PER_CELL,
-                   cells_per_block=HOG_CELLS_PER_BLOCK,
-                   block_norm='L2-Hys', # Common normalization
-                   visualize=False, #
-                   transform_sqrt=True, 
-                   feature_vector=True) 
-    return features
+    if visualize_output:
+        features, hog_image = hog(image,
+                               orientations=HOG_ORIENTATIONS,
+                               pixels_per_cell=HOG_PIXELS_PER_CELL,
+                               cells_per_block=HOG_CELLS_PER_BLOCK,
+                               block_norm='L2-Hys', 
+                               visualize=True, 
+                               transform_sqrt=True, 
+                               feature_vector=True)
+        return features, hog_image
+    else:
+        features = hog(image,
+                       orientations=HOG_ORIENTATIONS,
+                       pixels_per_cell=HOG_PIXELS_PER_CELL,
+                       cells_per_block=HOG_CELLS_PER_BLOCK,
+                       block_norm='L2-Hys',
+                       visualize=False, 
+                       transform_sqrt=True, 
+                       feature_vector=True)
+        return features
 
 if __name__ == "__main__":
     # Load Data
@@ -129,9 +141,39 @@ if __name__ == "__main__":
         print("No images remained after preprocessing. Exiting.")
         exit()
 
-    # Extract HOG Features
-    print("Extracting HOG features...")
-    hog_features = np.array([extract_hog_features(img) for img in processed_images])
+    # Visualize HOG features for one sample image
+    print("\nVisualizing HOG features for one sample image...")
+    if processed_images:
+        sample_image_for_hog_viz = processed_images[0] # Take the first preprocessed image
+        # Extract HOG features and the HOG image for visualization
+        _, hog_visualization_image = extract_hog_features(sample_image_for_hog_viz, visualize_output=True)
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6), sharex=True, sharey=True)
+
+        ax1.axis('off')
+        ax1.imshow(sample_image_for_hog_viz, cmap=plt.cm.gray)
+        ax1.set_title('Input Image (Preprocessed)')
+
+        ax2.axis('off')
+        ax2.imshow(hog_visualization_image, cmap=plt.cm.gray)
+        ax2.set_title('Histogram of Oriented Gradients (HOG)')
+        
+        plt.tight_layout()
+        try:
+            plt.show()
+        except Exception as e:
+            print(f"Could not display HOG visualization plot. If running in a headless environment, this is expected. Error: {e}")
+    else:
+        print("Skipping HOG visualization as no processed images are available.")
+
+    # Extract HOG Features for all images (for training)
+    print("\nExtracting HOG features for all images for training...")
+    # Ensure we call extract_hog_features without visualize_output=True for the main batch
+    hog_features_list = []
+    for img in processed_images:
+        features = extract_hog_features(img) # Default visualize_output is False
+        hog_features_list.append(features)
+    hog_features = np.array(hog_features_list)
     print(f"HOG features extracted. Shape: {hog_features.shape}")
 
     # Feature Scaling
